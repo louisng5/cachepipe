@@ -5,7 +5,7 @@ pipe = CachePipe("testing.db")
 def fnA(a, b)->str:
     return "result" + str(a) + str(b)
 
-@pipe.func(ver=1,schema=[TABLENAME,TABLEINDEX],dependencies=[fnA])
+@pipe.func(ver=1,schema=[TABLENAME,TABLEINDEX],dependencies=[])
 def fuB(a, b)->str:
     x = other_func(a, b)
     0/0

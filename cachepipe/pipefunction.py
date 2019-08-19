@@ -97,29 +97,30 @@ class PipeFunction:
         return self.__name__ + hash_obj.hexdigest()
 
     def __call__(self, *args, **kwargs):
+        context = self.get_current_context(*args, **kwargs)
+        return context.get_source()
 
+    def get_current_context(self, *args, **kwargs):
+        caller_context = self.get_caller_context()
+        return CallContext(self,
+                           schema=self.schema, func_call=self.fn, caller_context=caller_context, call_args=args,
+                           call_kwargs=kwargs, dependency_key=self.dependency_key(),
+                           magic_argspec=self.magic_argspec).get_source()
+
+
+
+    def get_caller_context(self):
         if not self.pipe.initialized:
             self.pipe.initialize()
         caller_context = self._caller_context()
         if self._call_eligible(caller_context):
-            _pipe_call_context = CallContext(self,
-                                             schema=self.schema,
-                                             func_call=self.fn,
-                                             # tablename=call_tablename,
-                                             caller_context=caller_context,
-                                             call_args = args,
-                                             call_kwargs = kwargs,
-                                             dependency_key = self.dependency_key(),
-                                             magic_argspec=self.magic_argspec)
-
-            return _pipe_call_context.get_source()
+            return caller_context
         else:
             raise Exception('You are trying to call {0}() from {1}() which is not specified in dependencies.'.format(
                 self.__name__,
                 caller_context.pipefn.__name__
             )
             )
-
     def _cached_call(self,):
         pass
 

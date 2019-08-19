@@ -21,13 +21,15 @@ class CallContext():
         else:
             self.head = caller_context.head
 
-
+    def call(self):
+        _pipe_call_context = self
+        return self.func_call(*self.call_args,**self.call_kwargs)
     def get_source(self):
         try:
             if not self.adapter.check_source():
                 df = self.pipefn.serdes._serialize(
                     (
-                        self.func_call(*self.call_args,**self.call_kwargs)
+                        self.call()
                     )
                 )
                 self.adapter.submit_result(df)
@@ -44,12 +46,4 @@ class CallContext():
                 for fn in reversed(self._exception_cleanup_fns):
                     fn()
 
-    def remove_old_cache(self, table_name, conn):
-        normal_name = table_name[:-56]
-        table_df = pd.read_sql("SELECT name as tbl_name from sqlite_master WHERE type='table'",conn)
-        table_df['normal_name'] = table_df.tbl_name.apply(lambda x: x[:-56])
-        table_df = table_df[table_df.normal_name == normal_name]
-        cur = conn.cursor()
-        for tbl in table_df.tbl_name.values:
-            if table_name != tbl:
-                cur.execute('drop table ' + tbl)
+
