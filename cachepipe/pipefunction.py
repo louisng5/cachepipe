@@ -6,7 +6,7 @@ from .config import _hash_fn
 from .call_context import CallContext
 from .serdes import BaseSerDes,TypeDefaultSerDes
 from abc import ABC, abstractmethod
-
+from .callproxy import CallProxy
 try:
   basestring
 except NameError:
@@ -88,39 +88,22 @@ class PipeFunction:
             self._dependency_key =  "fn:" + self.fn.__name__ + "(" + ''.join(["(" + i.dependency_key() + ")" for i in self._sorted_dependencies()]) + ")"
         return self._dependency_key
 
-    def tablename(self,*args, **kwargs):
-        args_dic = {k:v for k,v in self.magic_argspec(*args, **kwargs).items() if k in self._tablename_args}
-        ares_key = self._args_key(args_dic)
-        table_name_key = self.dependency_key() + ares_key
-        hash_obj = _hash_fn()
-        hash_obj.update(table_name_key.encode())
-        return self.__name__ + hash_obj.hexdigest()
+    def proxy(self, *args, **kwargs):
+        return CallProxy(self.get_current_context(*args, **kwargs))
 
     def __call__(self, *args, **kwargs):
         context = self.get_current_context(*args, **kwargs)
         return context.get_source()
 
     def get_current_context(self, *args, **kwargs):
-        caller_context = self.get_caller_context()
-        return CallContext(self,
-                           schema=self.schema, func_call=self.fn, caller_context=caller_context, call_args=args,
-                           call_kwargs=kwargs, dependency_key=self.dependency_key(),
-                           magic_argspec=self.magic_argspec).get_source()
-
-
-
-    def get_caller_context(self):
         if not self.pipe.initialized:
             self.pipe.initialize()
-        caller_context = self._caller_context()
-        if self._call_eligible(caller_context):
-            return caller_context
-        else:
-            raise Exception('You are trying to call {0}() from {1}() which is not specified in dependencies.'.format(
-                self.__name__,
-                caller_context.pipefn.__name__
-            )
-            )
+        return CallContext(self,
+                           schema=self.schema, func_call=self.fn, call_args=args,
+                           call_kwargs=kwargs, dependency_key=self.dependency_key(),
+                           magic_argspec=self.magic_argspec)
+
+
     def _cached_call(self,):
         pass
 
@@ -128,26 +111,20 @@ class PipeFunction:
         sorted_args = ((i,args_dic[i]) for i in sorted(args_dic))
         return ','.join([k + ':' + _to_string(v) for k,v in sorted_args])
 
-    def _caller_context(self):
-        frame = inspect.currentframe().f_back
-        while frame:
-            if '_pipe_call_context' in frame.f_locals:
-                return frame.f_locals['_pipe_call_context']
-            else:
-                frame = frame.f_back
-        return
 
-    def _call_eligible(self,caller_context):
-        return (caller_context is None) or (self in caller_context.pipefn.dependencies)
 
     def __repr__(self):
         return "<" + self.__module__ + " PipeFunction (" + self.fn.__repr__() + ")>"
-
-    # def __getattr__(self, item):
-    #     if item in ['__defaults__','__globals__','__annotations__','__kwdefaults__','__code__']:
-    #         return getattr(self.fn,item)
-    #     else:
-    #         raise AttributeError(item)
+    def __defaults__(self):
+        return self.fn.__defaults__
+    def __globals__(self):
+        return self.fn.__globals__
+    def __annotations__(self):
+        return self.fn.__annotations__
+    def __kwdefaults__(self):
+        return self.fn.__kwdefaults__
+    def __code__(self):
+        return self.fn.__code__
 
 
 def _analyse_argspec(fn):

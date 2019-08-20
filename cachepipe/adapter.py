@@ -81,7 +81,7 @@ class SqliteAdapter():
 
     def table_key_exist(self,tableindex_args,table_name, conn):
         keys = tableindex_args.keys()
-        return conn.execute("select count(1) from {0} where ".format(table_name) + ','.join([self._INDEX_COL_NAME + k + ' = ? ' for k in keys]) + 'LIMIT 1', [tableindex_args[k] for k in keys]).fetchall()[0][0] == 1
+        return conn.execute("select count(1) from {0} where ".format(table_name) + ' and '.join([self._INDEX_COL_NAME + k + ' = ? ' for k in keys]) + 'LIMIT 1', [tableindex_args[k] for k in keys]).fetchall()[0][0] == 1
 
 
     def old_tables(self,table_name, conn):
@@ -137,6 +137,9 @@ class SqliteAdapter():
                     return False
         return True
 
+    def subquery(self):
+        pass
+
     def submit_result(self,df):
         exception_cleanup_fn = []
         normal_cleanup_fn = []
@@ -159,16 +162,18 @@ class SqliteAdapter():
                 self.reg_exception_cleanup(exception_cleanup_fn)
                 df.to_sql(self.tablename(), conn, index=True, index_label=df.index.names, if_exists='append')
 
+    def _get_result_sql(self):
+        sql ="select * from {0} ".format(self.tablename())
+        if self.schema.arg_dic(TABLEINDEX) != {}:
+            keys = self.schema.arg_dic(TABLEINDEX).keys()
+            sql = sql + ' where ' + ' and '.join([self._INDEX_COL_NAME + k + ' = ?' for k in keys])
+        return sql
+
     def get_result(self):
         with self.cx_conn() as conn:
-            if self.schema.arg_dic(TABLEINDEX) == {}:
-                cur = conn.execute("select * from {0} ".format(self.tablename()))
-                df = pd.DataFrame(cur.fetchall(), columns=list(map(lambda x: x[0], cur.description)))
-            else:
-                keys = self.schema.arg_dic(TABLEINDEX).keys()
-                cur = conn.execute("select * from {0} where "
-                                   .format(self.tablename()) + ','.join([self._INDEX_COL_NAME + k + ' = ?' for k in keys]),
-                                   [self.schema.arg_dic(TABLEINDEX)[k] for k in keys])
-                df = pd.DataFrame(cur.fetchall(), columns=list(map(lambda x: x[0], cur.description))).drop(
-                    [self._INDEX_COL_NAME + i for i in self.schema.arg_dic(TABLEINDEX).keys()], axis=1)
+            keys = self.schema.arg_dic(TABLEINDEX).keys()
+            # faster than pd.read_sql
+            cur = conn.execute(self._get_result_sql(),[self.schema.arg_dic(TABLEINDEX)[k] for k in keys])
+            df = pd.DataFrame(cur.fetchall(), columns=list(map(lambda x: x[0], cur.description))).drop(
+                [self._INDEX_COL_NAME + i for i in self.schema.arg_dic(TABLEINDEX).keys()], axis=1)
         return df
