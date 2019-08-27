@@ -17,6 +17,9 @@ class TABLEINDEX(SchemaItem):
 class DBNAME(SchemaItem):
     pass
 
+class IGNORE(SchemaItem):
+    pass
+
 class Schema():
     def __init__(self, dic, argspec):
         self.sehema_dic = dic
